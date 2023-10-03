@@ -310,6 +310,7 @@ impl<'a> CrateType<'a> {
     }
 }
 
+// !!!etag1 this generates rustdoc actual file pub_module_level_const_missing via rustdoc_cmd.generate_rustdoc
 fn generate_rustdoc(
     config: &mut GlobalConfig,
     rustdoc_cmd: &RustdocCommand,
@@ -320,71 +321,40 @@ fn generate_rustdoc(
     let name = crate_source.name()?;
     let version = crate_source.version()?;
     let feature_identifier = crate_data.feature_config.make_identifier();
-    let crate_identifier = if feature_identifier.is_empty() {
-        crate_source.slug()?
-    } else {
-        format!(
-            "{}-{}",
-            crate_source.slug()?,
-            crate_data.feature_config.make_identifier(),
-        )
-    };
+    let crate_identifier = if feature_identifier.is_empty() {crate_source.slug()?
+    } else {format!("{}-{}",crate_source.slug()?,crate_data.feature_config.make_identifier(),)};
 
     let (cache_dir, cached_rustdoc) = match crate_source {
         CrateSource::Registry { .. } => {
             let cache_dir = target_root.join("cache");
             let cached_rustdoc = cache_dir.join(format!("{crate_identifier}.json"));
-
-            // We assume that the generated rustdoc is untouched.
-            // Users should run cargo-clean if they experience any anomalies.
+            // We assume that the generated rustdoc is untouched. Users should run cargo-clean if they experience any anomalies.
             if cached_rustdoc.exists() {
-                config.shell_status(
-                    "Parsing",
-                    format_args!(
-                        "{name} v{version} ({}, cached)",
-                        crate_data.crate_type.type_name()
-                    ),
-                )?;
+                config.shell_status("Parsing",format_args!("{name} v{version} ({}, cached)",crate_data.crate_type.type_name()),)?;
                 return Ok(cached_rustdoc);
             }
-
             (Some(cache_dir), Some(cached_rustdoc))
         }
-        CrateSource::ManifestPath { .. } => {
-            // Manifest-based crates cannot be cached since they correspond
-            // to a specific (and unknown) gitrev and git state which is not part of their slug.
-            // There's no way to check whether a cached entry is a match or not.
+        CrateSource::ManifestPath { .. } => { // Manifest-based crates cannot be cached since they correspond to a specific (and unknown) gitrev and git state which is not part of their slug. There's no way to check whether a cached entry is a match or not.
             (None, None)
         }
     };
-
-    config.shell_status(
-        "Parsing",
-        format_args!("{name} v{version} ({})", crate_data.crate_type.type_name()),
-    )?;
-
+    config.shell_status("Parsing",format_args!("{name} v{version} ({})", crate_data.crate_type.type_name()),)?;
     let build_dir = target_root.join(&crate_identifier);
-    let rustdoc_path =
-        rustdoc_cmd.generate_rustdoc(config, build_dir.clone(), &crate_source, &crate_data)?;
+    let rustdoc_path = rustdoc_cmd.generate_rustdoc(config, build_dir.clone(), &crate_source, &crate_data)?;
+
+    println!("×××!!! generated rustdoc_path = {:?}",&rustdoc_path);
 
     match crate_source {
-        CrateSource::Registry { .. } => {
-            // Clean up after ourselves.
-            let cache_dir = cache_dir.expect(
-                "when crate_source is Registry a cache_dir was created, so it should be Some",
-            );
-            let cached_rustdoc = cached_rustdoc.expect(
-                "when crate_source is Registry a cached_rustdoc was created, so it should be Some",
-            );
+        CrateSource::Registry { .. } => { // Clean up after ourselves.
+            let cache_dir = cache_dir.expect("when crate_source is Registry a cache_dir was created, so it should be Some",);
+            let cached_rustdoc = cached_rustdoc.expect("when crate_source is Registry a cached_rustdoc was created, so it should be Some",);
             std::fs::create_dir_all(cache_dir)?;
             std::fs::copy(rustdoc_path, &cached_rustdoc)?;
             std::fs::remove_dir_all(build_dir)?;
-
             Ok(cached_rustdoc)
         }
-        CrateSource::ManifestPath { .. } => {
-            // We don't do any caching here -- since the crate is saved locally,
-            // it could be modified by the user after it was cached.
+        CrateSource::ManifestPath { .. } => { // We don't do any caching here -- since the crate is saved locally, it could be modified by the user after it was cached.
             Ok(rustdoc_path)
         }
     }
@@ -429,13 +399,12 @@ pub(crate) struct RustdocFromProjectRoot {
     target_root: PathBuf,
 }
 
-impl RustdocFromProjectRoot {
-    /// # Arguments
+impl RustdocFromProjectRoot { // # Arguments
     /// * `project_root` - Path to a directory with the manifest or with subdirectories with the manifests.
-    /// * `target_root` - Path to a directory where the placeholder manifest / rustdoc can be created.
+    /// * `target_root`  - Path to a directory where the placeholder manifest / rustdoc can be created.
     pub(crate) fn new(
         project_root: &std::path::Path,
-        target_root: &std::path::Path,
+        target_root : &std::path::Path,
     ) -> anyhow::Result<Self> {
         let mut manifests = std::collections::HashMap::new();
         let mut manifest_errors = std::collections::HashMap::new();
@@ -445,56 +414,49 @@ impl RustdocFromProjectRoot {
                 let path = entry.into_path();
                 match crate::manifest::Manifest::parse(path.clone()) {
                     Ok(manifest) => match crate::manifest::get_package_name(&manifest) {
-                        Ok(name) => {
-                            manifests.insert(name.to_string(), manifest);
-                        }
-                        Err(e) => {
-                            manifest_errors.insert(path, e);
-                        }
-                    },
-                    Err(e) => {
-                        manifest_errors.insert(path, e);
-                    }
-                }
-            }
+                        Ok(name)	=> {manifests.insert(name.to_string(), manifest);}
+                        Err(e)  	=> {manifest_errors.insert(path, e);}},
+                    Err(e)      	=> {manifest_errors.insert(path, e);}}}
         }
+        // println!("project_root {:?} manifests{:?} target_root{:?}",project_root,manifests,target_root);
+        // ×b Root("pub_module_level_const_missing\\old")
+        // project_root "pub_module_level_const_missing\\old"
+        // target_root  ".cache\\cargo\\semver-checks"
+        // manifests{
+        // "pub_module_level_const_missing": Manifest { path: "pub_module_level_const_missing\\old\\Cargo.toml",
+        // parsed: Manifest { package: Some(Package { name: "pub_module_level_const_missing", edition: Set(E2021), rust_version: None, version: Set("0.1.0"), build: None, workspace: None, authors: Set([]), links: None, description: None, homepage: None, documentation: None, readme: Set(Flag(true)), keywords: Set([]), categories: Set([]), exclude: Set([]), include: Set([]), license: None, license_file: None, repository: None, default_run: None, autobins: true, autoexamples: true, autotests: true, autobenches: true, publish: Set(Flag(false)), resolver: None, metadata: None }), workspace: None, dependencies: {}, dev_dependencies: {}, build_dependencies: {}, target: {}, features: {}, replace: {}, patch: {}, lib: Some(Product { path: Some("src/lib.rs"), name: Some("pub_module_level_const_missing"), test: true, doctest: true, bench: true, doc: true, plugin: false, proc_macro: false, harness: true, edition: E2021, crate_type: ["rlib"], required_features: [] }), profile: Profiles { release: None, dev: None, test: None, bench: None, doc: None, custom: {} }, badges: Badges { appveyor: None, circle_ci: None, gitlab: None, travis_ci: None, codecov: None, coveralls: None, is_it_maintained_issue_resolution: None, is_it_maintained_open_issues: None, maintenance: Maintenance { status: None } }, bin: [], bench: [], test: [], example: [] } }}
         Ok(Self {
             project_root: project_root.to_owned(),
-            manifests,
-            manifest_errors,
-            target_root: target_root.to_owned(),
+            manifests,manifest_errors,
+            target_root : target_root.to_owned(),
         })
     }
 }
 
+// etag2: calls generate_rustdoc @l313 to generate rustdoc actual file pub_module_level_const_missing
 impl RustdocGenerator for RustdocFromProjectRoot {
-    fn load_rustdoc(
-        &self,
-        config: &mut GlobalConfig,
-        rustdoc_cmd: &RustdocCommand,
-        crate_data: CrateDataForRustdoc,
-    ) -> anyhow::Result<PathBuf> {
+    fn load_rustdoc(&self,
+        config     	: &mut GlobalConfig,
+        rustdoc_cmd	: &RustdocCommand,
+        crate_data 	: CrateDataForRustdoc,) -> anyhow::Result<PathBuf> {
+        // println!("!!!RustdocGenerator for RustdocFromProjectRoot");
         let manifest: &Manifest = self.manifests.get(crate_data.name).ok_or_else(|| {
             let err = anyhow::anyhow!(
                 "package `{}` not found in {}",
                 crate_data.name,
                 self.project_root.display(),
             );
-            if self.manifest_errors.is_empty() {
-                err
+            if self.manifest_errors.is_empty() {err
             } else {
-                let cause_list = self
-                    .manifest_errors
-                    .values()
+                let cause_list = self.manifest_errors.values()
                     .map(|error| format!("  {error:#},"))
                     .join("\n");
                 let possible_causes = format!("possibly due to errors: [\n{cause_list}\n]");
                 err.context(possible_causes)
             }
         })?;
-        generate_rustdoc(
-            config,
-            rustdoc_cmd,
+        //println!("generate_rustdoc RustdocGenerator for RustdocFromProjectRoot");
+        generate_rustdoc(config,rustdoc_cmd,
             self.target_root.clone(),
             CrateSource::ManifestPath { manifest },
             crate_data,
@@ -715,50 +677,24 @@ fn choose_baseline_version(
 }
 
 impl RustdocGenerator for RustdocFromRegistry {
-    fn load_rustdoc(
-        &self,
+    fn load_rustdoc(&self,
         config: &mut GlobalConfig,
         rustdoc_cmd: &RustdocCommand,
         crate_data: CrateDataForRustdoc,
     ) -> anyhow::Result<PathBuf> {
         let crate_ = self.index.krate(crate_data.name.try_into().expect("this should be impossible"), false)
-            .with_context(|| {
-                format!("failed to read index metadata for crate '{}'", crate_data.name)
-            })?
-            .with_context(|| {
-            anyhow::format_err!(
-                "{} not found in registry (crates.io). \
-        For workarounds check \
-        https://github.com/obi1kenobi/cargo-semver-checks#does-the-crate-im-checking-have-to-be-published-on-cratesio",
-                crate_data.name
-            )
+          .with_context(|| {format!("failed to read index metadata for crate '{}'", crate_data.name)})?
+          .with_context(|| {anyhow::format_err!("{} not found in registry (crates.io). For workarounds check https://github.com/obi1kenobi/-semver-checks#does-the-crate-im-checking-have-to-be-published-on-cratesio",crate_data.name)
         })?;
-
-        let base_version = if let Some(base) = &self.version {
-            base.clone()
-        } else {
-            choose_baseline_version(
-                &crate_,
+        let base_version = if let Some(base) = &self.version { base.clone()
+        } else { choose_baseline_version(&crate_,
                 match crate_data.crate_type {
                     CrateType::Current => None,
-                    CrateType::Baseline {
-                        highest_allowed_version,
-                    } => highest_allowed_version,
-                },
-            )?
+                    CrateType::Baseline {highest_allowed_version,} => highest_allowed_version,
+                },)?
         };
-
-        let crate_ = crate_
-            .versions
-            .iter()
-            .find(|v| v.version == base_version)
-            .with_context(|| {
-                anyhow::format_err!(
-                    "Version {} of crate {} not found in registry",
-                    crate_data.name,
-                    base_version
-                )
-            })?;
+        let crate_ = crate_.versions.iter().find(|v| v.version == base_version)
+            .with_context(|| {anyhow::format_err!("Version {} of crate {} not found in registry",crate_data.name,base_version)})?;
 
         generate_rustdoc(
             config,

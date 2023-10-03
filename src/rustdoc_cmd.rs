@@ -51,68 +51,34 @@ impl RustdocCommand {
         crate_source: &CrateSource,
         crate_data: &CrateDataForRustdoc,
     ) -> anyhow::Result<std::path::PathBuf> {
-        // Generate an empty placeholder project with a dependency on the crate
-        // whose rustdoc we need. We take this indirect generation path to avoid issues like:
-        // https://github.com/obi1kenobi/cargo-semver-checks/issues/167#issuecomment-1382367128
-        let placeholder_manifest =
-            create_placeholder_rustdoc_manifest(config, crate_source, crate_data)
-                .context("failed to create placeholder manifest")?;
-        let placeholder_manifest_path =
-            save_placeholder_rustdoc_manifest(build_dir.as_path(), placeholder_manifest)
-                .context("failed to save placeholder rustdoc manifest")?;
+        // Generate an empty placeholder project with a dependency on the crate whose rustdoc we need. We take this indirect generation path to avoid issues like: https://github.com/obi1kenobi/cargo-semver-checks/issues/167#issuecomment-1382367128
+        let placeholder_manifest     	= create_placeholder_rustdoc_manifest(config, crate_source, crate_data).context("failed to create placeholder manifest")?;
+        let placeholder_manifest_path	= save_placeholder_rustdoc_manifest(build_dir.as_path(), placeholder_manifest).context("failed to save placeholder rustdoc manifest")?;
 
-        let metadata = cargo_metadata::MetadataCommand::new()
-            .manifest_path(&placeholder_manifest_path)
-            .exec()?;
+        let metadata = cargo_metadata::MetadataCommand::new().manifest_path(&placeholder_manifest_path).exec()?;
         let placeholder_target_directory = metadata
-            .target_directory
-            .as_path()
-            .as_std_path()
-            // HACK: Avoid potential errors when mixing toolchains
-            .join(crate::util::SCOPE)
-            .join("target");
+            .target_directory.as_path().as_std_path().join(crate::util::SCOPE).join("target");
+            // HACK: Avoid potential errors when mixing toolchains ↑
         let target_dir = placeholder_target_directory.as_path();
-
-        let stderr = if self.silence {
-            std::process::Stdio::piped()
-        } else {
-            // Print cargo doc progress
-            std::process::Stdio::inherit()
+        let stderr = if self.silence {std::process::Stdio::piped()
+        } else { std::process::Stdio::inherit()// Print cargo doc progress
         };
-
         let crate_name = crate_source.name()?;
         let version = crate_source.version()?;
         let pkg_spec = format!("{crate_name}@{version}");
 
-        // Run the rustdoc generation command on the placeholder crate,
-        // specifically requesting the rustdoc of *only* the crate specified in `pkg_spec`.
-        //
-        // N.B.: Passing `--all-features` here has no effect, since that only applies to
-        //       the top-level project i.e. the placeholder, which has no features.
-        //       To generate rustdoc for our intended crate with features enabled,
-        //       those features must be enabled on the dependency in the `Cargo.toml`
-        //       of the placeholder project.
+        // Run the rustdoc generation command on the placeholder crate, specifically requesting the rustdoc of *only* the crate specified in `pkg_spec`.
+        // N.B.: Passing `--all-features` here has no effect, since that only applies to the top-level project i.e. the placeholder, which has no features. To generate rustdoc for our intended crate with features enabled, those features must be enabled on the dependency in the `Cargo.toml` of the placeholder project.
+        println!("placeholder_manifest_path {:?}\ntarget_dir{:?}\npkg_spec{:?}",&placeholder_manifest_path,&target_dir,&pkg_spec);
         let mut cmd = std::process::Command::new("cargo");
-        cmd.env("RUSTC_BOOTSTRAP", "1")
-            .env(
-                "RUSTDOCFLAGS",
-                "-Z unstable-options --document-private-items --document-hidden-items --output-format=json --cap-lints allow",
-            )
-            .stdout(std::process::Stdio::null()) // Don't pollute output
-            .stderr(stderr)
-            .arg("doc")
-            .arg("--manifest-path")
-            .arg(&placeholder_manifest_path)
-            .arg("--target-dir")
-            .arg(target_dir)
-            .arg("--package")
-            .arg(pkg_spec);
-        if !self.deps {
-            cmd.arg("--no-deps");
-        }
-        if config.is_stderr_tty() {
-            cmd.arg("--color=always");
-        }
+        cmd.env("RUSTC_BOOTSTRAP","1").env("RUSTDOCFLAGS","-Z unstable-options --document-private-items --document-hidden-items --output-format=json --cap-lints allow",)
+            .stdout(std::process::Stdio::null()).stderr(stderr)  // Don't pollute output
+            .arg("doc").arg("--manifest-path").arg(&placeholder_manifest_path).arg("--target-dir").arg(target_dir).arg("--package").arg(pkg_spec);
+        // $RUSTC_BOOTSTRAP=1
+        // $RUSTDOCFLAGS='-Z unstable-options --document-private-items --document-hidden-items --output-format=json --cap-lints allow'
+        // cargo doc --manifest-path ".cache\\cargo\\semver-checks\\local-pub_module_level_const_missing-0_1_0\\Cargo.toml" --target-dir ".cache\\cargo\\semver-checks\\target"  --package "pub_module_level_const_missing@0.1.0"
+        if !self.deps { cmd.arg("--no-deps");}
+        if config.is_stderr_tty() { cmd.arg("--color=always");}
 
         let output = cmd.output()?;
         if !output.status.success() {

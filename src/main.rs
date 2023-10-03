@@ -1,3 +1,4 @@
+#![allow(unused_imports,unused_variables,unreachable_code,dead_code,non_upper_case_globals)]
 #![forbid(unsafe_code)]
 
 use std::path::PathBuf;
@@ -11,75 +12,22 @@ fn main() -> anyhow::Result<()> {
     human_panic::setup_panic!();
 
     let Cargo::SemverChecks(args) = Cargo::parse();
-    if args.bugreport {
-        use bugreport::{bugreport, collector::*, format::Markdown};
-        bugreport!()
-            .info(SoftwareVersion::default())
-            .info(OperatingSystem::default())
-            .info(CommandLine::default())
-            .info(CommandOutput::new("cargo version", "cargo", &["-V"]))
-            .info(CompileTimeInformation::default())
-            .print::<Markdown>();
-        std::process::exit(0);
-    } else if args.list {
-        let queries = SemverQuery::all_queries();
-        let mut rows = vec![["id", "type", "description"], ["==", "====", "==========="]];
-        for query in queries.values() {
-            rows.push([
-                query.id.as_str(),
-                query.required_update.as_str(),
-                query.description.as_str(),
-            ]);
-        }
-        let mut widths = [0; 3];
-        for row in &rows {
-            widths[0] = widths[0].max(row[0].len());
-            widths[1] = widths[1].max(row[1].len());
-            widths[2] = widths[2].max(row[2].len());
-        }
-        let stdout = std::io::stdout();
-        let mut stdout = stdout.lock();
-        for row in rows {
-            use std::io::Write;
-            writeln!(
-                stdout,
-                "{0:<1$} {2:<3$} {4:<5$}",
-                row[0], widths[0], row[1], widths[1], row[2], widths[2]
-            )?;
-        }
-
-        let mut config = GlobalConfig::new().set_level(args.check_release.verbosity.log_level());
-        config.shell_note("Use `--explain <id>` to see more details")?;
-        std::process::exit(0);
-    } else if let Some(id) = args.explain.as_deref() {
-        let queries = SemverQuery::all_queries();
-        let query = queries.get(id).ok_or_else(|| {
-            let ids = queries.keys().cloned().collect::<Vec<_>>();
-            anyhow::format_err!(
-                "Unknown id `{}`, available id's:\n  {}",
-                id,
-                ids.join("\n  ")
-            )
-        })?;
-        println!(
-            "{}",
-            query
-                .reference
-                .as_deref()
-                .unwrap_or(query.description.as_str())
-        );
-        if let Some(link) = &query.reference_link {
-            println!();
-            println!("See also {link}");
-        }
-        std::process::exit(0);
-    }
-
-    let check: cargo_semver_checks::Check = match args.command {
-        Some(SemverChecksCommands::CheckRelease(args)) => args.into(),
-        None => args.check_release.into(),
-    };
+    // println!("×××× main");
+    // todo: find out what calls generate_rustdoc that generates pub_module_level_const_missing.json
+    // and then what queries the file
+    println!("args.command {:?}",args.command);
+    println!("args.check_release {:?}",args.check_release);
+    let check: cargo_semver_checks::Check = args.check_release.into();
+    // etag7: calls @lib.rs check_release that calls generate_versioned_crates to call @rustdoc_gen to generate rustdoc actual file pub_module_level_const_missing
     let report = check.check_release()?;
+
+    // CheckRelease { manifest: Manifest { manifest_path: None }
+    // , workspace: Workspace { package: [], workspace: false, all: false, exclude: [] }
+    // , current_rustdoc: None, baseline_version: None, baseline_rev: None, baseline_rustdoc: None, release_type: None, default_features: false
+    // , only_explicit_features: false, features: [], baseline_features: [], current_features: [], all_features: false, verbosity: Verbosity { verbose: 0 , quiet: 0
+    // , baseline_root: Some("pub_module_level_const_missing\\old")
+    // , phantom: PhantomData<clap_verbosity_flag::InfoLevel> } }
+
     if report.success() {
         std::process::exit(0);
     } else {
@@ -95,23 +43,10 @@ enum Cargo {
     SemverChecks(SemverChecks),
 }
 
-#[derive(Debug, Args)]
-#[command(args_conflicts_with_subcommands = true)]
+#[derive(Debug, Args)] #[command(args_conflicts_with_subcommands = true)]
 struct SemverChecks {
-    #[arg(long, global = true, exclusive = true)]
-    bugreport: bool,
-
-    #[arg(long, global = true, exclusive = true)]
-    explain: Option<String>,
-
-    #[arg(long, global = true, exclusive = true)]
-    list: bool,
-
-    #[clap(flatten)]
-    check_release: CheckRelease,
-
-    #[command(subcommand)]
-    command: Option<SemverChecksCommands>,
+  #[clap(flatten)]      	check_release	: CheckRelease,
+  #[command(subcommand)]	command      	: Option<SemverChecksCommands>,
 }
 
 /// Check your crate for semver violations.
@@ -123,12 +58,8 @@ enum SemverChecksCommands {
 
 #[derive(Debug, Args)]
 struct CheckRelease {
-    #[command(flatten, next_help_heading = "Current")]
-    pub manifest: clap_cargo::Manifest,
-
-    #[command(flatten, next_help_heading = "Current")]
-    pub workspace: clap_cargo::Workspace,
-
+    #[command(flatten, next_help_heading = "Current")] pub manifest: clap_cargo::Manifest,
+    #[command(flatten, next_help_heading = "Current")] pub workspace: clap_cargo::Workspace,
     /// The current rustdoc json output to test for semver violations.
     #[arg(
         long,
@@ -263,39 +194,28 @@ struct CheckRelease {
 
 impl From<CheckRelease> for cargo_semver_checks::Check {
     fn from(value: CheckRelease) -> Self {
-        let (current, current_project_root) = if let Some(current_rustdoc) = value.current_rustdoc {
-            (Rustdoc::from_path(current_rustdoc), None)
-        } else if let Some(manifest) = value.manifest.manifest_path {
-            let project_root = if manifest.is_dir() {
-                manifest
-            } else {
-                manifest
-                    .parent()
-                    .expect("manifest path doesn't have a parent")
-                    .to_path_buf()
-            };
-            (Rustdoc::from_root(&project_root), Some(project_root))
-        } else {
-            let project_root = std::env::current_dir().expect("can't determine current directory");
-            (Rustdoc::from_root(&project_root), Some(project_root))
-        };
+        let project_root = std::env::current_dir().expect("can't determine current directory");
+        let (current, current_project_root) = (Rustdoc::from_root(&project_root), Some(project_root));
         let mut check = Self::new(current);
-        if value.workspace.all || value.workspace.workspace {
-            // Specified explicit `--workspace` or `--all`.
-            let mut selection = PackageSelection::new(ScopeSelection::Workspace);
-            selection.with_excluded_packages(value.workspace.exclude);
-            check.with_package_selection(selection);
-        } else if !value.workspace.package.is_empty() {
-            // Specified explicit `--package`.
-            check.with_packages(value.workspace.package);
-        } else if !value.workspace.exclude.is_empty() {
-            // Specified `--exclude` without `--workspace/--all`.
-            // Leave the scope selection to the default ("workspace if the manifest is a workspace")
-            // while excluding any specified packages.
-            let mut selection = PackageSelection::new(ScopeSelection::DefaultMembers);
-            selection.with_excluded_packages(value.workspace.exclude);
-            check.with_package_selection(selection);
-        }
+        // if value.workspace.all || value.workspace.workspace {
+        //     println!("✗✗ sdfsasdf");
+        //     // Specified explicit `--workspace` or `--all`.
+        //     let mut selection = PackageSelection::new(ScopeSelection::Workspace);
+        //     selection.with_excluded_packages(value.workspace.exclude);
+        //     check.with_package_selection(selection);
+        // } else if !value.workspace.package.is_empty() {
+        //     println!("✗✗ sdfsasdf else ");
+        //     // Specified explicit `--package`.
+        //     check.with_packages(value.workspace.package);
+        // } else if !value.workspace.exclude.is_empty() {
+        //     println!("✗✗ sdfsasdf else 3");
+        //     // Specified `--exclude` without `--workspace/--all`.
+        //     // Leave the scope selection to the default ("workspace if the manifest is a workspace")
+        //     // while excluding any specified packages.
+        //     let mut selection = PackageSelection::new(ScopeSelection::DefaultMembers);
+        //     selection.with_excluded_packages(value.workspace.exclude);
+        //     check.with_package_selection(selection);
+        // }
         let custom_baseline = {
             if let Some(baseline_version) = value.baseline_version {
                 Some(Rustdoc::from_registry(baseline_version))
@@ -344,10 +264,4 @@ impl From<CheckRelease> for cargo_semver_checks::Check {
 
         check
     }
-}
-
-#[test]
-fn verify_cli() {
-    use clap::CommandFactory;
-    Cargo::command().debug_assert()
 }
